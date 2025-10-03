@@ -96,14 +96,20 @@ jobs:
           echo "frontend=$(find frontend/build -type f -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
           echo "backend=$(find backend -name "*.js" -type f -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
+      - name: Debug - Check artifact action versions
+        run: |
+          echo "Current runner version: $RUNNER_VERSION"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Available actions versions will be logged below"
+
       - name: Upload frontend build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ github.sha }}
           path: frontend/build/
 
       - name: Upload backend build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-build-${{ github.sha }}
           path: backend/
@@ -131,15 +137,27 @@ jobs:
         with:
           terraform_version: "1.5.0"
 
+      - name: Debug - Log artifact download attempts
+        run: |
+          echo "Attempting to download artifacts with v3 actions"
+          echo "Frontend artifact: frontend-build-${{ github.sha }}"
+          echo "Backend artifact: backend-build-${{ github.sha }}"
+
+      - name: Debug - Log production artifact download attempts
+        run: |
+          echo "Production deployment - attempting to download artifacts with v3 actions"
+          echo "Frontend artifact: frontend-build-${{ github.sha }}"
+          echo "Backend artifact: backend-build-${{ github.sha }}"
+
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build-${{ github.sha }}
           path: frontend/build/
         continue-on-error: true
 
       - name: Download backend artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: backend-build-${{ github.sha }}
           path: backend/
@@ -209,14 +227,14 @@ jobs:
           terraform_version: "1.5.0"
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build-${{ github.sha }}
           path: frontend/build/
         continue-on-error: true
 
       - name: Download backend artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: backend-build-${{ github.sha }}
           path: backend/

@@ -65,7 +65,7 @@ JobBoard-DevOps-Project/
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/your-username/JobBoard-DevOps-Project.git
+git clone https://github.com/Acteus/JobBoard-DevOps-Project.git
 cd JobBoard-DevOps-Project
 ```
 

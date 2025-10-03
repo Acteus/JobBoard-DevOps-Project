@@ -146,19 +146,19 @@ function App() {
 
     // Apply sorting
     switch (filters.sortBy) {
-      case 'salary-high':
-        filtered.sort((a, b) => b.salary - a.salary);
-        break;
-      case 'salary-low':
-        filtered.sort((a, b) => a.salary - b.salary);
-        break;
-      case 'title':
-        filtered.sort((a, b) => a.title.localeCompare(b.title));
-        break;
-      case 'date':
-      default:
-        filtered.sort((a, b) => new Date(b.posted_date) - new Date(a.posted_date));
-        break;
+    case 'salary-high':
+      filtered.sort((a, b) => b.salary - a.salary);
+      break;
+    case 'salary-low':
+      filtered.sort((a, b) => a.salary - b.salary);
+      break;
+    case 'title':
+      filtered.sort((a, b) => a.title.localeCompare(b.title));
+      break;
+    case 'date':
+    default:
+      filtered.sort((a, b) => new Date(b.posted_date) - new Date(a.posted_date));
+      break;
     }
 
     setFilteredJobs(filtered);

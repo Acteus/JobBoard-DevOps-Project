@@ -85,15 +85,15 @@ const AnalyticsDashboard = ({ jobs }) => {
       totalJobs: jobs.length,
       avgSalary: validJobs.length > 0
         ? (() => {
-            const total = validJobs.reduce((sum, job) => {
-              const salary = parseFloat(job.salary);
-              console.log(`Adding salary ${salary} to sum`);
-              return sum + salary;
-            }, 0);
-            const average = total / validJobs.length;
-            console.log(`Total: ${total}, Count: ${validJobs.length}, Average: ${average}`);
-            return Math.round(average * 100) / 100;
-          })()
+          const total = validJobs.reduce((sum, job) => {
+            const salary = parseFloat(job.salary);
+            console.log(`Adding salary ${salary} to sum`);
+            return sum + salary;
+          }, 0);
+          const average = total / validJobs.length;
+          console.log(`Total: ${total}, Count: ${validJobs.length}, Average: ${average}`);
+          return Math.round(average * 100) / 100;
+        })()
         : 0,
     };
   }, [jobs]);

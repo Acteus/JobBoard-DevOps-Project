@@ -11,27 +11,27 @@ const Notification = ({ type = 'info', message, onClose, autoClose = true, durat
 
   const getNotificationIcon = () => {
     switch (type) {
-      case 'success':
-        return <CheckCircle size={20} />;
-      case 'error':
-        return <XCircle size={20} />;
-      case 'warning':
-        return <AlertCircle size={20} />;
-      default:
-        return <Info size={20} />;
+    case 'success':
+      return <CheckCircle size={20} />;
+    case 'error':
+      return <XCircle size={20} />;
+    case 'warning':
+      return <AlertCircle size={20} />;
+    default:
+      return <Info size={20} />;
     }
   };
 
   const getNotificationColor = () => {
     switch (type) {
-      case 'success':
-        return '#27ae60';
-      case 'error':
-        return '#e74c3c';
-      case 'warning':
-        return '#f39c12';
-      default:
-        return '#3498db';
+    case 'success':
+      return '#27ae60';
+    case 'error':
+      return '#e74c3c';
+    case 'warning':
+      return '#f39c12';
+    default:
+      return '#3498db';
     }
   };
 

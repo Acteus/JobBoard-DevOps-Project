@@ -35,27 +35,27 @@ const SystemStatus = ({ jobs }) => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'online':
-      case 'connected':
-        return '#27ae60';
-      case 'offline':
-      case 'disconnected':
-        return '#e74c3c';
-      default:
-        return '#f39c12';
+    case 'online':
+    case 'connected':
+      return '#27ae60';
+    case 'offline':
+    case 'disconnected':
+      return '#e74c3c';
+    default:
+      return '#f39c12';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'online':
-      case 'connected':
-        return <Wifi size={16} />;
-      case 'offline':
-      case 'disconnected':
-        return <WifiOff size={16} />;
-      default:
-        return <Activity size={16} className="animate-pulse" />;
+    case 'online':
+    case 'connected':
+      return <Wifi size={16} />;
+    case 'offline':
+    case 'disconnected':
+      return <WifiOff size={16} />;
+    default:
+      return <Activity size={16} className="animate-pulse" />;
     }
   };
 

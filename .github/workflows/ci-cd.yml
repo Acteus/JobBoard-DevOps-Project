@@ -170,8 +170,112 @@ jobs:
         run: |
           cd terraform
           terraform init
+
+          echo "Checking for existing resources..."
+          # Check if VPC exists and import if needed
+          VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+            echo "Found existing VPC: $VPC_ID"
+            terraform import aws_vpc.main "$VPC_ID" 2>/dev/null || echo "VPC import failed or already imported"
+          fi
+
+          # Check if subnets exist and import if needed
+          for i in 0 1; do
+            SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            if [ ! -z "$SUBNET_ID" ] && [ "$SUBNET_ID" != "None" ]; then
+              echo "Found existing public subnet $((i+1)): $SUBNET_ID"
+              terraform import "aws_subnet.public[$i]" "$SUBNET_ID" 2>/dev/null || echo "Subnet import failed or already imported"
+            fi
+
+            PRIVATE_SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            if [ ! -z "$PRIVATE_SUBNET_ID" ] && [ "$PRIVATE_SUBNET_ID" != "None" ]; then
+              echo "Found existing private subnet $((i+1)): $PRIVATE_SUBNET_ID"
+              terraform import "aws_subnet.private[$i]" "$PRIVATE_SUBNET_ID" 2>/dev/null || echo "Private subnet import failed or already imported"
+            fi
+          done
+
+          # Check if security groups exist and import if needed
+          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
+            echo "Found existing web security group: $WEB_SG_ID"
+            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
+          fi
+
+          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
+            echo "Found existing app security group: $APP_SG_ID"
+            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
+          fi
+
+          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
+            echo "Found existing db security group: $DB_SG_ID"
+            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
+          fi
+
+          # Check if IAM role exists and import if needed
+          IAM_ROLE_NAME="jobboard-ec2-role"
+          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
+            echo "Found existing IAM role: $IAM_ROLE_NAME"
+            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
+          fi
+
+          # Check if security groups exist and import if needed
+          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
+            echo "Found existing web security group: $WEB_SG_ID"
+            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
+          fi
+
+          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
+            echo "Found existing app security group: $APP_SG_ID"
+            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
+          fi
+
+          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
+            echo "Found existing db security group: $DB_SG_ID"
+            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
+          fi
+
+          # Check if IAM role exists and import if needed
+          IAM_ROLE_NAME="jobboard-ec2-role"
+          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
+            echo "Found existing IAM role: $IAM_ROLE_NAME"
+            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
+          fi
+
+          # Check if security groups exist and import if needed
+          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
+            echo "Found existing web security group: $WEB_SG_ID"
+            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
+          fi
+
+          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
+            echo "Found existing app security group: $APP_SG_ID"
+            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
+          fi
+
+          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
+            echo "Found existing db security group: $DB_SG_ID"
+            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
+          fi
+
+          # Check if IAM role exists and import if needed
+          IAM_ROLE_NAME="jobboard-ec2-role"
+          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
+            echo "Found existing IAM role: $IAM_ROLE_NAME"
+            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
+          fi
+
           echo "Checking AWS EIP limits..."
           aws ec2 describe-addresses --query 'Addresses | length' || echo "EIP check completed"
+
+          echo "Running terraform plan..."
           terraform plan \
             -var="environment=dev" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
@@ -180,6 +284,8 @@ jobs:
             -var="db_username=jobboard_user" \
             -var="instance_type=t2.micro" \
             -var="key_pair_name=jobboard-key"
+
+          echo "Applying terraform configuration..."
           terraform apply -auto-approve \
             -var="environment=dev" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
@@ -283,6 +389,57 @@ jobs:
         run: |
           cd terraform
           terraform init
+
+          echo "Checking for existing resources..."
+          # Check if VPC exists and import if needed
+          VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+            echo "Found existing VPC: $VPC_ID"
+            terraform import aws_vpc.main "$VPC_ID" 2>/dev/null || echo "VPC import failed or already imported"
+          fi
+
+          # Check if subnets exist and import if needed
+          for i in 0 1; do
+            SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            if [ ! -z "$SUBNET_ID" ] && [ "$SUBNET_ID" != "None" ]; then
+              echo "Found existing public subnet $((i+1)): $SUBNET_ID"
+              terraform import "aws_subnet.public[$i]" "$SUBNET_ID" 2>/dev/null || echo "Subnet import failed or already imported"
+            fi
+
+            PRIVATE_SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            if [ ! -z "$PRIVATE_SUBNET_ID" ] && [ "$PRIVATE_SUBNET_ID" != "None" ]; then
+              echo "Found existing private subnet $((i+1)): $PRIVATE_SUBNET_ID"
+              terraform import "aws_subnet.private[$i]" "$PRIVATE_SUBNET_ID" 2>/dev/null || echo "Private subnet import failed or already imported"
+            fi
+          done
+
+          # Check if security groups exist and import if needed
+          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
+            echo "Found existing web security group: $WEB_SG_ID"
+            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
+          fi
+
+          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
+            echo "Found existing app security group: $APP_SG_ID"
+            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
+          fi
+
+          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
+            echo "Found existing db security group: $DB_SG_ID"
+            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
+          fi
+
+          # Check if IAM role exists and import if needed
+          IAM_ROLE_NAME="jobboard-ec2-role"
+          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
+            echo "Found existing IAM role: $IAM_ROLE_NAME"
+            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
+          fi
+
+          echo "Running terraform plan..."
           terraform plan \
             -var="environment=prod" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
@@ -293,6 +450,8 @@ jobs:
             -var="key_pair_name=jobboard-key" \
             -var="deletion_protection=true" \
             -var="multi_az=true"
+
+          echo "Applying terraform configuration..."
           terraform apply -auto-approve \
             -var="environment=prod" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \

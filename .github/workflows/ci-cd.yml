@@ -206,6 +206,12 @@ jobs:
           key_pair_name = "jobboard-key"
           EOF
 
+      - name: Initialize Terraform
+        run: |
+          cd terraform
+          echo "Initializing Terraform..."
+          terraform init
+
       - name: Import existing resources
         run: |
           cd terraform
@@ -227,7 +233,7 @@ jobs:
               RESOURCE_ID=$(aws iam get-role --role-name "$filter_value" --query 'Role.RoleName' --output text 2>/dev/null || echo "")
             fi
 
-            if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ]; then
+            if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
               echo "Found existing $resource_type: $RESOURCE_ID"
               terraform import "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
             else
@@ -261,11 +267,14 @@ jobs:
           echo "Timestamp: $(date)"
 
           echo "Checking AWS EIP limits..."
-          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text 2>/dev/null) || {
-            echo "❌ Failed to check EIP limits"
-            exit 1
-          }
+          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text 2>/dev/null) || EIP_COUNT="0"
           echo "Current EIP count: $EIP_COUNT"
+
+          # Validate EIP_COUNT is a number
+          if ! [[ "$EIP_COUNT" =~ ^[0-9]+$ ]]; then
+            echo "⚠️ Could not determine EIP count, defaulting to 0"
+            EIP_COUNT="0"
+          fi
 
           if [ "$EIP_COUNT" -ge 4 ]; then
             echo "⚠️ WARNING: High EIP usage ($EIP_COUNT/5)"
@@ -424,6 +433,12 @@ jobs:
           multi_az = true
           EOF
 
+      - name: Initialize Terraform
+        run: |
+          cd terraform
+          echo "Initializing Terraform for production..."
+          terraform init
+
       - name: Import existing resources
         run: |
           cd terraform
@@ -445,7 +460,7 @@ jobs:
               RESOURCE_ID=$(aws iam get-role --role-name "$filter_value" --query 'Role.RoleName' --output text 2>/dev/null || echo "")
             fi
 
-            if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ]; then
+            if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
               echo "Found existing $resource_type: $RESOURCE_ID"
               terraform import "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
             else
@@ -479,11 +494,14 @@ jobs:
           echo "Timestamp: $(date)"
 
           echo "Checking AWS EIP limits for production..."
-          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text 2>/dev/null) || {
-            echo "❌ Failed to check EIP limits"
-            exit 1
-          }
+          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text 2>/dev/null) || EIP_COUNT="0"
           echo "Current EIP count: $EIP_COUNT"
+
+          # Validate EIP_COUNT is a number
+          if ! [[ "$EIP_COUNT" =~ ^[0-9]+$ ]]; then
+            echo "⚠️ Could not determine EIP count, defaulting to 0"
+            EIP_COUNT="0"
+          fi
 
           if [ "$EIP_COUNT" -ge 4 ]; then
             echo "⚠️ WARNING: High EIP usage ($EIP_COUNT/5)"

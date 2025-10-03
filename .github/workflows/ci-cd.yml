@@ -96,12 +96,6 @@ jobs:
           echo "frontend=$(find frontend/build -type f -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
           echo "backend=$(find backend -name "*.js" -type f -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
-      - name: Debug - Check artifact action versions
-        run: |
-          echo "Current runner version: $RUNNER_VERSION"
-          echo "Runner OS: $RUNNER_OS"
-          echo "Available actions versions will be logged below"
-
       - name: Upload frontend build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -135,7 +129,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.5.0"
+          terraform_version: "1.6.6"
 
       - name: Check AWS Limits
         run: |
@@ -157,17 +151,6 @@ jobs:
             exit 1
           fi
 
-      - name: Debug - Log artifact download attempts
-        run: |
-          echo "Attempting to download artifacts with v3 actions"
-          echo "Frontend artifact: frontend-build-${{ github.sha }}"
-          echo "Backend artifact: backend-build-${{ github.sha }}"
-
-      - name: Debug - Log production artifact download attempts
-        run: |
-          echo "Production deployment - attempting to download artifacts with v3 actions"
-          echo "Frontend artifact: frontend-build-${{ github.sha }}"
-          echo "Backend artifact: backend-build-${{ github.sha }}"
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -260,7 +243,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.5.0"
+          terraform_version: "1.6.6"
 
       - name: Check AWS Limits
         run: |

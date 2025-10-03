@@ -128,6 +128,14 @@ resource "aws_route_table_association" "public" {
 
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      subnet_id,
+      route_table_id,
+    ]
+  }
 }
 
 resource "aws_route_table_association" "private" {
@@ -135,6 +143,14 @@ resource "aws_route_table_association" "private" {
 
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private[count.index].id
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      subnet_id,
+      route_table_id,
+    ]
+  }
 }
 
 # Security Groups
@@ -267,6 +283,14 @@ resource "aws_db_subnet_group" "main" {
   name       = "${var.project_name}-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
 
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      subnet_ids,
+      tags,
+    ]
+  }
+
   tags = {
     Name = "${var.project_name}-db-subnet-group"
   }
@@ -388,6 +412,7 @@ resource "aws_iam_instance_profile" "ec2_profile" {
     prevent_destroy = true
     ignore_changes = [
       tags,
+      name,
     ]
   }
 
@@ -490,6 +515,8 @@ resource "aws_lb" "app" {
     ignore_changes = [
       tags,
       name,
+      security_groups,
+      subnets,
     ]
   }
 
@@ -527,6 +554,7 @@ resource "aws_lb_target_group" "app" {
     ignore_changes = [
       tags,
       name,
+      vpc_id,
     ]
   }
 

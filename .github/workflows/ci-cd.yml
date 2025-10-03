@@ -256,12 +256,29 @@ jobs:
               # Special handling for internet gateway - check if VPC already has one attached
               VPC_ID="$4"
               IGW_ID=$(aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values="$VPC_ID" --query 'InternetGateways[0].InternetGatewayId' --output text 2>/dev/null || echo "")
-              if [ ! -z "$IGW_ID" ] && [ "$IGW_ID" != "None" ]; then
+              if [ ! -z "$IGW_ID" ] && [ "$IGW_ID" != "None" ] && [ "$IGW_ID" != "" ]; then
                 RESOURCE_ID=$IGW_ID
                 echo "Found existing internet gateway $IGW_ID attached to VPC $VPC_ID"
+                if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$IGW_ID" 2>/dev/null; then
+                  echo "✅ Successfully imported internet gateway"
+                else
+                  echo "❌ Failed to import internet gateway"
+                fi
               else
-                echo "No internet gateway found attached to VPC $VPC_ID"
+                echo "ℹ️ No internet gateway found for VPC $VPC_ID - will be created by Terraform"
               fi
+            elif [ "$resource_type" = "db_subnet_group" ]; then
+              # Check for existing DB subnet group
+              RESOURCE_ID=$(aws rds describe-db-subnet-groups --subnet-group-name "$filter_value" --query 'DBSubnetGroups[0].DBSubnetGroupName' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "log_group" ]; then
+              # Check for existing CloudWatch log group
+              RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$filter_value" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "db_subnet_group" ]; then
+              # Check for existing DB subnet group
+              RESOURCE_ID=$(aws rds describe-db-subnet-groups --subnet-group-name "$filter_value" --query 'DBSubnetGroups[0].DBSubnetGroupName' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "log_group" ]; then
+              # Check for existing CloudWatch log group
+              RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$filter_value" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
             fi
 
             if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
@@ -296,6 +313,12 @@ jobs:
           import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
           import_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
           import_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
+
+          # Import DB subnet group
+          import_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
+
+          # Import CloudWatch log group
+          import_resource "log_group" "aws_cloudwatch_log_group.app" "jobboard-app"
 
           # Import route table associations
           import_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
@@ -506,6 +529,21 @@ jobs:
               RESOURCE_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values="$filter_value" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
             elif [ "$resource_type" = "iam_role" ]; then
               RESOURCE_ID=$(aws iam get-role --role-name "$filter_value" --query 'Role.RoleName' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "internet_gateway" ]; then
+              # Special handling for internet gateway - check if VPC already has one attached
+              VPC_ID="$4"
+              IGW_ID=$(aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values="$VPC_ID" --query 'InternetGateways[0].InternetGatewayId' --output text 2>/dev/null || echo "")
+              if [ ! -z "$IGW_ID" ] && [ "$IGW_ID" != "None" ] && [ "$IGW_ID" != "" ]; then
+                RESOURCE_ID=$IGW_ID
+                echo "Found existing internet gateway $IGW_ID attached to VPC $VPC_ID"
+                if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$IGW_ID" 2>/dev/null; then
+                  echo "✅ Successfully imported internet gateway"
+                else
+                  echo "❌ Failed to import internet gateway"
+                fi
+              else
+                echo "ℹ️ No internet gateway found for VPC $VPC_ID - will be created by Terraform"
+              fi
             fi
 
             if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
@@ -535,6 +573,12 @@ jobs:
           import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
           import_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
           import_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
+
+          # Import DB subnet group
+          import_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
+
+          # Import CloudWatch log group
+          import_resource "log_group" "aws_cloudwatch_log_group.app" "jobboard-app"
 
           # Import route table associations
           import_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"

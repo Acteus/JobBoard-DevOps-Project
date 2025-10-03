@@ -73,8 +73,9 @@ resource "aws_subnet" "private" {
 }
 
 # NAT Gateway for private subnets
+# Using only 1 NAT Gateway to reduce costs and EIP usage
 resource "aws_eip" "nat" {
-  count = length(var.public_subnet_cidrs)
+  count = var.enable_ha_nat ? length(var.public_subnet_cidrs) : 1
   domain = "vpc"
 
   tags = {
@@ -83,7 +84,7 @@ resource "aws_eip" "nat" {
 }
 
 resource "aws_nat_gateway" "main" {
-  count = length(var.public_subnet_cidrs)
+  count = var.enable_ha_nat ? length(var.public_subnet_cidrs) : 1
 
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
@@ -91,6 +92,8 @@ resource "aws_nat_gateway" "main" {
   tags = {
     Name = "${var.project_name}-nat-${count.index + 1}"
   }
+
+  depends_on = [aws_internet_gateway.main]
 }
 
 # Route Tables
@@ -114,7 +117,8 @@ resource "aws_route_table" "private" {
 
   route {
     cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main[count.index].id
+    # Use first NAT Gateway for all private subnets when HA is disabled
+    nat_gateway_id = var.enable_ha_nat ? aws_nat_gateway.main[count.index].id : aws_nat_gateway.main[0].id
   }
 
   tags = {
@@ -360,11 +364,13 @@ resource "aws_cloudwatch_log_group" "app" {
   retention_in_days = var.cloudwatch_retention
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
     ignore_changes = [
       retention_in_days,
       tags,
     ]
+    # Allow recreation if needed
+    create_before_destroy = false
   }
 
   tags = {
@@ -409,11 +415,12 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_role.name
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
     ignore_changes = [
       tags,
       name,
     ]
+    create_before_destroy = false
   }
 
   tags = {

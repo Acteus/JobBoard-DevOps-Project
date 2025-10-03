@@ -129,3 +129,9 @@ variable "auto_minor_version_upgrade" {
   type        = bool
   default     = true
 }
+
+variable "enable_ha_nat" {
+  description = "Enable high availability NAT gateways (one per AZ). Set to false to use single NAT gateway and reduce costs/EIP usage."
+  type        = bool
+  default     = false
+}

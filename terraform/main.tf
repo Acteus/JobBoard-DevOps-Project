@@ -68,7 +68,7 @@ resource "aws_subnet" "private" {
 # NAT Gateway for private subnets
 resource "aws_eip" "nat" {
   count = length(var.public_subnet_cidrs)
-  vpc   = true
+  domain = "vpc"
 
   tags = {
     Name = "${var.project_name}-nat-eip-${count.index + 1}"

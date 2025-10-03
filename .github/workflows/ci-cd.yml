@@ -150,10 +150,10 @@ jobs:
       - name: Validate DB Password
         run: |
           echo "Validating DB password format..."
-          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#$%^&+=*!]{8,41}$ ]]; then
+          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
             echo "✅ DB password format is valid"
           else
-            echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#$%^&+=!* symbols"
+            echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#\$%^&+=*! symbols"
             exit 1
           fi
 
@@ -275,10 +275,10 @@ jobs:
       - name: Validate DB Password
         run: |
           echo "Validating DB password format..."
-          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#$%^&+=*!]{8,41}$ ]]; then
+          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
             echo "✅ DB password format is valid"
           else
-            echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#$%^&+=!* symbols"
+            echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#\$%^&+=*! symbols"
             exit 1
           fi
 

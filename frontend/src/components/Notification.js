@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 
 const Notification = ({ type = 'info', message, onClose, autoClose = true, duration = 5000 }) => {
@@ -52,6 +53,14 @@ const Notification = ({ type = 'info', message, onClose, autoClose = true, durat
       )}
     </div>
   );
+};
+
+Notification.propTypes = {
+  type: PropTypes.oneOf(['success', 'error', 'warning', 'info']),
+  message: PropTypes.string.isRequired,
+  onClose: PropTypes.func,
+  autoClose: PropTypes.bool,
+  duration: PropTypes.number,
 };
 
 export default Notification;

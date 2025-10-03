@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import axios from 'axios';
-import { Activity, Database, Wifi, WifiOff, TrendingUp, Users, DollarSign, MapPin } from 'lucide-react';
+import { Activity, Wifi, WifiOff, TrendingUp, Users, DollarSign, MapPin } from 'lucide-react';
 
 const SystemStatus = ({ jobs }) => {
   const [apiStatus, setApiStatus] = useState('checking');
@@ -149,6 +150,20 @@ const SystemStatus = ({ jobs }) => {
       </div>
     </div>
   );
+};
+
+SystemStatus.propTypes = {
+  jobs: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      title: PropTypes.string.isRequired,
+      employer: PropTypes.string.isRequired,
+      location: PropTypes.string.isRequired,
+      salary: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      description: PropTypes.string.isRequired,
+      posted_date: PropTypes.string.isRequired,
+    })
+  ).isRequired,
 };
 
 export default SystemStatus;

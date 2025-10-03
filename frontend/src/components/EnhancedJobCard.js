@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { MapPin, DollarSign, Calendar, Building, Star, Bookmark, Share2, MoreVertical } from 'lucide-react';
 
 const EnhancedJobCard = ({ job, onBookmark, onShare }) => {
@@ -144,6 +145,20 @@ const EnhancedJobCard = ({ job, onBookmark, onShare }) => {
       )}
     </div>
   );
+};
+
+EnhancedJobCard.propTypes = {
+  job: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    title: PropTypes.string.isRequired,
+    employer: PropTypes.string.isRequired,
+    location: PropTypes.string.isRequired,
+    salary: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    description: PropTypes.string,
+    posted_date: PropTypes.string.isRequired,
+  }).isRequired,
+  onBookmark: PropTypes.func,
+  onShare: PropTypes.func,
 };
 
 export default EnhancedJobCard;

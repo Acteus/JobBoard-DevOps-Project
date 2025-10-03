@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -29,13 +29,13 @@ function App() {
 
   useEffect(() => {
     fetchJobs();
-  }, []);
+  }, [fetchJobs]);
 
   useEffect(() => {
     setFilteredJobs(jobs);
   }, [jobs]);
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await axios.get('/api/jobs');
@@ -87,11 +87,11 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [showNotification]);
 
-  const showNotification = (type, message) => {
+  const showNotification = useCallback((type, message) => {
     setNotification({ type, message });
-  };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import PropTypes from 'prop-types';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,7 +13,7 @@ import {
   LineElement,
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import { TrendingUp, MapPin, DollarSign } from 'lucide-react';
+import { TrendingUp, DollarSign } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -224,6 +225,20 @@ const AnalyticsDashboard = ({ jobs }) => {
       </div>
     </div>
   );
+};
+
+AnalyticsDashboard.propTypes = {
+  jobs: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      title: PropTypes.string.isRequired,
+      employer: PropTypes.string.isRequired,
+      location: PropTypes.string.isRequired,
+      salary: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      description: PropTypes.string.isRequired,
+      posted_date: PropTypes.string.isRequired,
+    })
+  ).isRequired,
 };
 
 export default AnalyticsDashboard;

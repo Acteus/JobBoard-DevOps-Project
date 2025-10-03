@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, X, MapPin, DollarSign, Building } from 'lucide-react';
+import PropTypes from 'prop-types';
+import { Search, Filter, X, MapPin, DollarSign } from 'lucide-react';
 
 const SearchFilter = ({ jobs, onFilterChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -189,6 +190,21 @@ const SearchFilter = ({ jobs, onFilterChange }) => {
       )}
     </div>
   );
+};
+
+SearchFilter.propTypes = {
+  jobs: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      title: PropTypes.string.isRequired,
+      employer: PropTypes.string.isRequired,
+      location: PropTypes.string.isRequired,
+      salary: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      description: PropTypes.string.isRequired,
+      posted_date: PropTypes.string.isRequired,
+    })
+  ).isRequired,
+  onFilterChange: PropTypes.func.isRequired,
 };
 
 export default SearchFilter;

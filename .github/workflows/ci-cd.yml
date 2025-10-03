@@ -137,6 +137,26 @@ jobs:
         with:
           terraform_version: "1.5.0"
 
+      - name: Check AWS Limits
+        run: |
+          echo "Checking AWS EIP limits..."
+          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text)
+          echo "Current EIP count: $EIP_COUNT"
+          if [ "$EIP_COUNT" -ge 5 ]; then
+            echo "⚠️ WARNING: Approaching EIP limit ($EIP_COUNT/5)"
+            echo "Consider requesting a limit increase or cleaning up unused EIPs"
+          fi
+
+      - name: Validate DB Password
+        run: |
+          echo "Validating DB password format..."
+          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#$%^&+=*!]{8,41}$ ]]; then
+            echo "✅ DB password format is valid"
+          else
+            echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#$%^&+=!* symbols"
+            exit 1
+          fi
+
       - name: Debug - Log artifact download attempts
         run: |
           echo "Attempting to download artifacts with v3 actions"
@@ -167,8 +187,24 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform plan -var="environment=dev" -var="db_password=${{ secrets.DB_PASSWORD }}"
-          terraform apply -auto-approve -var="environment=dev" -var="db_password=${{ secrets.DB_PASSWORD }}"
+          echo "Checking AWS EIP limits..."
+          aws ec2 describe-addresses --query 'Addresses | length' || echo "EIP check completed"
+          terraform plan \
+            -var="environment=dev" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=jobboard" \
+            -var="db_username=jobboard_user" \
+            -var="instance_type=t2.micro" \
+            -var="key_pair_name=jobboard-key"
+          terraform apply -auto-approve \
+            -var="environment=dev" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=jobboard" \
+            -var="db_username=jobboard_user" \
+            -var="instance_type=t2.micro" \
+            -var="key_pair_name=jobboard-key"
 
       - name: Build and push Docker images
         run: |
@@ -226,6 +262,26 @@ jobs:
         with:
           terraform_version: "1.5.0"
 
+      - name: Check AWS Limits
+        run: |
+          echo "Checking AWS EIP limits for production..."
+          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text)
+          echo "Current EIP count: $EIP_COUNT"
+          if [ "$EIP_COUNT" -ge 5 ]; then
+            echo "⚠️ WARNING: Approaching EIP limit ($EIP_COUNT/5)"
+            echo "Consider requesting a limit increase or cleaning up unused EIPs"
+          fi
+
+      - name: Validate DB Password
+        run: |
+          echo "Validating DB password format..."
+          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#$%^&+=*!]{8,41}$ ]]; then
+            echo "✅ DB password format is valid"
+          else
+            echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#$%^&+=!* symbols"
+            exit 1
+          fi
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -244,8 +300,26 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform plan -var="environment=prod" -var="db_password=${{ secrets.DB_PASSWORD }}" -var="deletion_protection=true" -var="multi_az=true"
-          terraform apply -auto-approve -var="environment=prod" -var="db_password=${{ secrets.DB_PASSWORD }}" -var="deletion_protection=true" -var="multi_az=true"
+          terraform plan \
+            -var="environment=prod" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=jobboard" \
+            -var="db_username=jobboard_user" \
+            -var="instance_type=t2.micro" \
+            -var="key_pair_name=jobboard-key" \
+            -var="deletion_protection=true" \
+            -var="multi_az=true"
+          terraform apply -auto-approve \
+            -var="environment=prod" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="project_name=jobboard" \
+            -var="db_username=jobboard_user" \
+            -var="instance_type=t2.micro" \
+            -var="key_pair_name=jobboard-key" \
+            -var="deletion_protection=true" \
+            -var="multi_az=true"
 
       - name: Build and push Docker images
         run: |

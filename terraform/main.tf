@@ -33,6 +33,13 @@ resource "aws_vpc" "main" {
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      tags,
+    ]
+  }
+
   tags = {
     Name = "${var.project_name}-igw"
   }
@@ -328,6 +335,14 @@ resource "aws_cloudwatch_log_group" "app" {
   name              = "/aws/ec2/${var.project_name}-app"
   retention_in_days = var.cloudwatch_retention
 
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      retention_in_days,
+      tags,
+    ]
+  }
+
   tags = {
     Name = "${var.project_name}-app-logs"
   }
@@ -368,6 +383,13 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm" {
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "${var.project_name}-ec2-profile"
   role = aws_iam_role.ec2_role.name
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      tags,
+    ]
+  }
 
   tags = {
     Name = "${var.project_name}-ec2-profile"
@@ -463,6 +485,14 @@ resource "aws_lb" "app" {
 
   enable_deletion_protection = var.environment == "prod"
 
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      tags,
+      name,
+    ]
+  }
+
   tags = {
     Name = "${var.project_name}-alb"
   }
@@ -490,6 +520,14 @@ resource "aws_lb_target_group" "app" {
     type            = "lb_cookie"
     cookie_duration = 1800
     enabled         = false
+  }
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      tags,
+      name,
+    ]
   }
 
   tags = {

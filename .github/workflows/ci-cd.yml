@@ -223,14 +223,30 @@ jobs:
             local filter_value="$3"
 
             echo "Checking for existing $resource_type: $resource_name..."
+
             if [ "$resource_type" = "vpc" ]; then
               RESOURCE_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values="$filter_value" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
             elif [ "$resource_type" = "subnet" ]; then
-              RESOURCE_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values="$filter_value" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+              # For subnets, also check by CIDR block to avoid conflicts
+              SUBNET_CIDR="$4"
+              if [ ! -z "$SUBNET_CIDR" ]; then
+                RESOURCE_ID=$(aws ec2 describe-subnets --filters Name=cidr-block,Values="$SUBNET_CIDR" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+              fi
+              # Fallback to tag-based search if CIDR search fails
+              if [ -z "$RESOURCE_ID" ] || [ "$RESOURCE_ID" = "None" ]; then
+                RESOURCE_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values="$filter_value" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+              fi
             elif [ "$resource_type" = "security_group" ]; then
               RESOURCE_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values="$filter_value" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
             elif [ "$resource_type" = "iam_role" ]; then
               RESOURCE_ID=$(aws iam get-role --role-name "$filter_value" --query 'Role.RoleName' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "internet_gateway" ]; then
+              # Special handling for internet gateway - check if VPC already has one attached
+              VPC_ID="$4"
+              IGW_ID=$(aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values="$VPC_ID" --query 'InternetGateways[0].InternetGatewayId' --output text 2>/dev/null || echo "")
+              if [ ! -z "$IGW_ID" ] && [ "$IGW_ID" != "None" ]; then
+                RESOURCE_ID=$IGW_ID
+              fi
             fi
 
             if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
@@ -241,14 +257,20 @@ jobs:
             fi
           }
 
-          # Import VPC
+          # Import VPC first
           import_resource "vpc" "aws_vpc.main" "jobboard-vpc"
 
-          # Import subnets
-          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1"
-          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2"
-          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1"
-          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2"
+          # Get VPC ID for internet gateway import
+          VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+
+          # Import internet gateway (check if VPC already has one attached)
+          import_resource "internet_gateway" "aws_internet_gateway.main" "jobboard-igw" "$VPC_ID"
+
+          # Import subnets with CIDR blocks to avoid conflicts
+          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1" "10.0.1.0/24"
+          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2" "10.0.2.0/24"
+          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1" "10.0.3.0/24"
+          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2" "10.0.4.0/24"
 
           # Import security groups
           import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
@@ -468,14 +490,20 @@ jobs:
             fi
           }
 
-          # Import VPC
+          # Import VPC first
           import_resource "vpc" "aws_vpc.main" "jobboard-vpc"
 
-          # Import subnets
-          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1"
-          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2"
-          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1"
-          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2"
+          # Get VPC ID for internet gateway import
+          VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+
+          # Import internet gateway (check if VPC already has one attached)
+          import_resource "internet_gateway" "aws_internet_gateway.main" "jobboard-igw" "$VPC_ID"
+
+          # Import subnets with CIDR blocks to avoid conflicts
+          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1" "10.0.1.0/24"
+          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2" "10.0.2.0/24"
+          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1" "10.0.3.0/24"
+          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2" "10.0.4.0/24"
 
           # Import security groups
           import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"

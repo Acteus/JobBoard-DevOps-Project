@@ -144,7 +144,15 @@ jobs:
       - name: Validate DB Password
         run: |
           echo "Validating DB password format..."
-          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
+          if [ -z "${{ secrets.DB_PASSWORD }}" ]; then
+            echo "❌ DB_PASSWORD secret is not set in GitHub repository"
+            echo "Please add DB_PASSWORD to your repository secrets:"
+            echo "1. Go to your repository settings"
+            echo "2. Navigate to Secrets and variables > Actions"
+            echo "3. Add a new secret named 'DB_PASSWORD'"
+            echo "4. Set a secure password (8-41 characters, letters, numbers, and @#\$%^&+=*! symbols only)"
+            exit 1
+          elif [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
             echo "✅ DB password format is valid"
           else
             echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#\$%^&+=*! symbols"
@@ -276,7 +284,7 @@ jobs:
           aws ec2 describe-addresses --query 'Addresses | length' || echo "EIP check completed"
 
           echo "Running terraform plan..."
-          terraform plan \
+          terraform plan -input=false -no-color \
             -var="environment=dev" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="aws_region=${{ env.AWS_REGION }}" \
@@ -286,7 +294,7 @@ jobs:
             -var="key_pair_name=jobboard-key"
 
           echo "Applying terraform configuration..."
-          terraform apply -auto-approve \
+          terraform apply -input=false -no-color -auto-approve \
             -var="environment=dev" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="aws_region=${{ env.AWS_REGION }}" \
@@ -364,7 +372,15 @@ jobs:
       - name: Validate DB Password
         run: |
           echo "Validating DB password format..."
-          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
+          if [ -z "${{ secrets.DB_PASSWORD }}" ]; then
+            echo "❌ DB_PASSWORD secret is not set in GitHub repository"
+            echo "Please add DB_PASSWORD to your repository secrets:"
+            echo "1. Go to your repository settings"
+            echo "2. Navigate to Secrets and variables > Actions"
+            echo "3. Add a new secret named 'DB_PASSWORD'"
+            echo "4. Set a secure password (8-41 characters, letters, numbers, and @#\$%^&+=*! symbols only)"
+            exit 1
+          elif [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
             echo "✅ DB password format is valid"
           else
             echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#\$%^&+=*! symbols"
@@ -440,7 +456,7 @@ jobs:
           fi
 
           echo "Running terraform plan..."
-          terraform plan \
+          terraform plan -input=false -no-color \
             -var="environment=prod" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="aws_region=${{ env.AWS_REGION }}" \
@@ -452,7 +468,7 @@ jobs:
             -var="multi_az=true"
 
           echo "Applying terraform configuration..."
-          terraform apply -auto-approve \
+          terraform apply -input=false -no-color -auto-approve \
             -var="environment=prod" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="aws_region=${{ env.AWS_REGION }}" \

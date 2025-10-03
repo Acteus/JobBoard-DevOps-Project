@@ -16,7 +16,6 @@ app.use(express.json());
 
 // Database connection
 let db;
-let dbConnected = false;
 
 async function connectDB() {
   try {
@@ -26,12 +25,10 @@ async function connectDB() {
       password: process.env.DB_PASS,
       database: process.env.DB_NAME
     });
-    dbConnected = true;
     console.log('Connected to MySQL database');
     return true;
   } catch (error) {
     console.error('Database connection failed:', error.message);
-    dbConnected = false;
     console.log('Running in demo mode without database');
     return false;
   }
@@ -80,7 +77,7 @@ initializeDatabase().then((connected) => {
   });
 
   // Error handling middleware
-  app.use((err, req, res, next) => {
+  app.use((err, req, res, next) => {  // eslint-disable-line no-unused-vars
     console.error(err.stack);
     res.status(500).json({ error: 'Something went wrong!' });
   });

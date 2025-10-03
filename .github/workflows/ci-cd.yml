@@ -235,7 +235,7 @@ jobs:
 
             if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
               echo "Found existing $resource_type: $RESOURCE_ID"
-              terraform import "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
+              terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
             else
               echo "No existing $resource_type found"
             fi
@@ -462,7 +462,7 @@ jobs:
 
             if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
               echo "Found existing $resource_type: $RESOURCE_ID"
-              terraform import "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
+              terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
             else
               echo "No existing $resource_type found"
             fi

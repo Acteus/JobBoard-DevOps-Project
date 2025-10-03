@@ -216,8 +216,8 @@ jobs:
         run: |
           cd terraform
 
-          # Function to import resource if it exists
-          import_resource() {
+          # Function to import resource if it exists, create if it doesn't
+          import_or_create_resource() {
             local resource_type="$1"
             local resource_name="$2"
             local filter_value="$3"
@@ -241,15 +241,17 @@ jobs:
             elif [ "$resource_type" = "iam_role" ]; then
               RESOURCE_ID=$(aws iam get-role --role-name "$filter_value" --query 'Role.RoleName' --output text 2>/dev/null || echo "")
             elif [ "$resource_type" = "route_table_association" ]; then
-              # Special handling for route table associations
+              # Special handling for route table associations - get proper subnet and route table IDs
               SUBNET_ID="$4"
               ROUTE_TABLE_ID="$5"
-              if [ ! -z "$SUBNET_ID" ] && [ ! -z "$ROUTE_TABLE_ID" ]; then
-                # Check if association already exists
-                ASSOCIATION_ID=$(aws ec2 describe-route-tables --route-table-ids "$ROUTE_TABLE_ID" --query 'RouteTables[0].Associations[?SubnetId==`'$SUBNET_ID'`].RouteTableAssociationId' --output text 2>/dev/null || echo "")
-                if [ ! -z "$ASSOCIATION_ID" ] && [ "$ASSOCIATION_ID" != "None" ]; then
+              if [ ! -z "$SUBNET_ID" ] && [ ! -z "$ROUTE_TABLE_ID" ] && [ "$SUBNET_ID" != "None" ] && [ "$ROUTE_TABLE_ID" != "None" ]; then
+                # Verify these are actually subnet and route table IDs, not security group IDs
+                SUBNET_CHECK=$(aws ec2 describe-subnets --subnet-ids "$SUBNET_ID" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+                RT_CHECK=$(aws ec2 describe-route-tables --route-table-ids "$ROUTE_TABLE_ID" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")
+
+                if [ ! -z "$SUBNET_CHECK" ] && [ ! -z "$RT_CHECK" ] && [ "$SUBNET_CHECK" != "None" ] && [ "$RT_CHECK" != "None" ]; then
                   RESOURCE_ID="$SUBNET_ID/$ROUTE_TABLE_ID"
-                  echo "Found existing route table association between subnet $SUBNET_ID and route table $ROUTE_TABLE_ID"
+                  echo "Found valid subnet $SUBNET_ID and route table $ROUTE_TABLE_ID"
                 fi
               fi
             elif [ "$resource_type" = "internet_gateway" ]; then
@@ -259,10 +261,16 @@ jobs:
               if [ ! -z "$IGW_ID" ] && [ "$IGW_ID" != "None" ] && [ "$IGW_ID" != "" ]; then
                 RESOURCE_ID=$IGW_ID
                 echo "Found existing internet gateway $IGW_ID attached to VPC $VPC_ID"
-                if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$IGW_ID" 2>/dev/null; then
-                  echo "✅ Successfully imported internet gateway"
+
+                # Check if resource is already managed by Terraform
+                if terraform state list | grep -q "^$resource_name$"; then
+                  echo "ℹ️ Internet gateway $resource_name is already managed by Terraform"
                 else
-                  echo "❌ Failed to import internet gateway"
+                  if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$IGW_ID" 2>/dev/null; then
+                    echo "✅ Successfully imported internet gateway"
+                  else
+                    echo "❌ Failed to import internet gateway"
+                  fi
                 fi
               else
                 echo "ℹ️ No internet gateway found for VPC $VPC_ID - will be created by Terraform"
@@ -271,23 +279,59 @@ jobs:
               # Check for existing DB subnet group
               RESOURCE_ID=$(aws rds describe-db-subnet-groups --subnet-group-name "$filter_value" --query 'DBSubnetGroups[0].DBSubnetGroupName' --output text 2>/dev/null || echo "")
             elif [ "$resource_type" = "log_group" ]; then
-              # Check for existing CloudWatch log group
-              RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$filter_value" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
+              # Check for existing CloudWatch log group - use exact name match
+              LOG_GROUP_NAME="/aws/ec2/jobboard-app"
+              RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_NAME" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "route_table_association" ]; then
+              # Special handling for route table associations - get proper subnet and route table IDs
+              SUBNET_ID="$4"
+              ROUTE_TABLE_ID="$5"
+              if [ ! -z "$SUBNET_ID" ] && [ ! -z "$ROUTE_TABLE_ID" ] && [ "$SUBNET_ID" != "None" ] && [ "$ROUTE_TABLE_ID" != "None" ]; then
+                # Verify these are actually subnet and route table IDs, not security group IDs
+                SUBNET_CHECK=$(aws ec2 describe-subnets --subnet-ids "$SUBNET_ID" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+                RT_CHECK=$(aws ec2 describe-route-tables --route-table-ids "$ROUTE_TABLE_ID" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")
+
+                if [ ! -z "$SUBNET_CHECK" ] && [ ! -z "$RT_CHECK" ] && [ "$SUBNET_CHECK" != "None" ] && [ "$RT_CHECK" != "None" ]; then
+                  RESOURCE_ID="$SUBNET_ID/$ROUTE_TABLE_ID"
+                  echo "Found valid subnet $SUBNET_ID and route table $ROUTE_TABLE_ID"
+                fi
+              fi
             elif [ "$resource_type" = "db_subnet_group" ]; then
               # Check for existing DB subnet group
               RESOURCE_ID=$(aws rds describe-db-subnet-groups --subnet-group-name "$filter_value" --query 'DBSubnetGroups[0].DBSubnetGroupName' --output text 2>/dev/null || echo "")
             elif [ "$resource_type" = "log_group" ]; then
-              # Check for existing CloudWatch log group
-              RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$filter_value" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
+              # Check for existing CloudWatch log group - use exact name match
+              LOG_GROUP_NAME="/aws/ec2/jobboard-app"
+              RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_NAME" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "route_table_association" ]; then
+              # Special handling for route table associations - get proper subnet and route table IDs
+              SUBNET_ID="$4"
+              ROUTE_TABLE_ID="$5"
+              if [ ! -z "$SUBNET_ID" ] && [ ! -z "$ROUTE_TABLE_ID" ] && [ "$SUBNET_ID" != "None" ] && [ "$ROUTE_TABLE_ID" != "None" ]; then
+                # Verify these are actually subnet and route table IDs, not security group IDs
+                SUBNET_CHECK=$(aws ec2 describe-subnets --subnet-ids "$SUBNET_ID" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+                RT_CHECK=$(aws ec2 describe-route-tables --route-table-ids "$ROUTE_TABLE_ID" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")
+
+                if [ ! -z "$SUBNET_CHECK" ] && [ ! -z "$RT_CHECK" ] && [ "$SUBNET_CHECK" != "None" ] && [ "$RT_CHECK" != "None" ]; then
+                  RESOURCE_ID="$SUBNET_ID/$ROUTE_TABLE_ID"
+                  echo "Found valid subnet $SUBNET_ID and route table $ROUTE_TABLE_ID"
+                fi
+              fi
             fi
 
             if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
               echo "Found existing $resource_type: $RESOURCE_ID"
               echo "Attempting to import $resource_name with ID $RESOURCE_ID"
-              if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$RESOURCE_ID"; then
-                echo "✅ Successfully imported $resource_type: $RESOURCE_ID"
+
+              # Check if resource is already managed by Terraform
+              if terraform state list | grep -q "^$resource_name$"; then
+                echo "ℹ️ Resource $resource_name is already managed by Terraform"
               else
-                echo "⚠️ Import failed or resource already imported: $resource_name"
+                if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$RESOURCE_ID" 2>/dev/null; then
+                  echo "✅ Successfully imported $resource_type: $RESOURCE_ID"
+                else
+                  echo "⚠️ Import failed or resource already imported: $resource_name"
+                fi
               fi
             else
               echo "No existing $resource_type found with the specified criteria"
@@ -295,39 +339,39 @@ jobs:
           }
 
           # Import VPC first
-          import_resource "vpc" "aws_vpc.main" "jobboard-vpc"
+          import_or_create_resource "vpc" "aws_vpc.main" "jobboard-vpc"
 
           # Get VPC ID for internet gateway import
           VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
 
           # Import internet gateway (check if VPC already has one attached)
-          import_resource "internet_gateway" "aws_internet_gateway.main" "jobboard-igw" "$VPC_ID"
+          import_or_create_resource "internet_gateway" "aws_internet_gateway.main" "jobboard-igw" "$VPC_ID"
 
           # Import subnets with CIDR blocks to avoid conflicts
-          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1" "10.0.1.0/24"
-          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2" "10.0.2.0/24"
-          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1" "10.0.3.0/24"
-          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2" "10.0.4.0/24"
+          import_or_create_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1" "10.0.1.0/24"
+          import_or_create_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2" "10.0.2.0/24"
+          import_or_create_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1" "10.0.3.0/24"
+          import_or_create_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2" "10.0.4.0/24"
 
           # Import security groups
-          import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
-          import_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
-          import_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
+          import_or_create_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
+          import_or_create_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
+          import_or_create_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
 
           # Import DB subnet group
-          import_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
+          import_or_create_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
 
           # Import CloudWatch log group
-          import_resource "log_group" "aws_cloudwatch_log_group.app" "jobboard-app"
+          import_or_create_resource "log_group" "aws_cloudwatch_log_group.app" "/aws/ec2/jobboard-app"
 
           # Import route table associations
-          import_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
-          import_resource "route_table_association" "aws_route_table_association.public[1]" "jobboard-public-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
-          import_resource "route_table_association" "aws_route_table_association.private[0]" "jobboard-private-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-1 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
-          import_resource "route_table_association" "aws_route_table_association.private[1]" "jobboard-private-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-2 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.public[1]" "jobboard-public-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.private[0]" "jobboard-private-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-1 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.private[1]" "jobboard-private-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-2 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
 
           # Import IAM role
-          import_resource "iam_role" "aws_iam_role.ec2_role" "jobboard-ec2-role"
+          import_or_create_resource "iam_role" "aws_iam_role.ec2_role" "jobboard-ec2-role"
 
       - name: Deploy infrastructure
         run: |
@@ -514,8 +558,8 @@ jobs:
         run: |
           cd terraform
 
-          # Function to import resource if it exists
-          import_resource() {
+          # Function to import resource if it exists, create if it doesn't
+          import_or_create_resource() {
             local resource_type="$1"
             local resource_name="$2"
             local filter_value="$3"
@@ -536,10 +580,16 @@ jobs:
               if [ ! -z "$IGW_ID" ] && [ "$IGW_ID" != "None" ] && [ "$IGW_ID" != "" ]; then
                 RESOURCE_ID=$IGW_ID
                 echo "Found existing internet gateway $IGW_ID attached to VPC $VPC_ID"
-                if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$IGW_ID" 2>/dev/null; then
-                  echo "✅ Successfully imported internet gateway"
+
+                # Check if resource is already managed by Terraform
+                if terraform state list | grep -q "^$resource_name$"; then
+                  echo "ℹ️ Internet gateway $resource_name is already managed by Terraform"
                 else
-                  echo "❌ Failed to import internet gateway"
+                  if terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$IGW_ID" 2>/dev/null; then
+                    echo "✅ Successfully imported internet gateway"
+                  else
+                    echo "❌ Failed to import internet gateway"
+                  fi
                 fi
               else
                 echo "ℹ️ No internet gateway found for VPC $VPC_ID - will be created by Terraform"
@@ -548,46 +598,52 @@ jobs:
 
             if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ] && [ "$RESOURCE_ID" != "" ]; then
               echo "Found existing $resource_type: $RESOURCE_ID"
-              terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
+
+              # Check if resource is already managed by Terraform
+              if terraform state list | grep -q "^$resource_name$"; then
+                echo "ℹ️ Resource $resource_name is already managed by Terraform"
+              else
+                terraform import -var="db_password=${{ secrets.DB_PASSWORD }}" "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
+              fi
             else
               echo "No existing $resource_type found"
             fi
           }
 
           # Import VPC first
-          import_resource "vpc" "aws_vpc.main" "jobboard-vpc"
+          import_or_create_resource "vpc" "aws_vpc.main" "jobboard-vpc"
 
           # Get VPC ID for internet gateway import
           VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
 
           # Import internet gateway (check if VPC already has one attached)
-          import_resource "internet_gateway" "aws_internet_gateway.main" "jobboard-igw" "$VPC_ID"
+          import_or_create_resource "internet_gateway" "aws_internet_gateway.main" "jobboard-igw" "$VPC_ID"
 
           # Import subnets with CIDR blocks to avoid conflicts
-          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1" "10.0.1.0/24"
-          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2" "10.0.2.0/24"
-          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1" "10.0.3.0/24"
-          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2" "10.0.4.0/24"
+          import_or_create_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1" "10.0.1.0/24"
+          import_or_create_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2" "10.0.2.0/24"
+          import_or_create_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1" "10.0.3.0/24"
+          import_or_create_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2" "10.0.4.0/24"
 
           # Import security groups
-          import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
-          import_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
-          import_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
+          import_or_create_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
+          import_or_create_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
+          import_or_create_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
 
           # Import DB subnet group
-          import_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
+          import_or_create_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
 
           # Import CloudWatch log group
-          import_resource "log_group" "aws_cloudwatch_log_group.app" "jobboard-app"
+          import_or_create_resource "log_group" "aws_cloudwatch_log_group.app" "/aws/ec2/jobboard-app"
 
           # Import route table associations
-          import_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
-          import_resource "route_table_association" "aws_route_table_association.public[1]" "jobboard-public-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
-          import_resource "route_table_association" "aws_route_table_association.private[0]" "jobboard-private-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-1 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
-          import_resource "route_table_association" "aws_route_table_association.private[1]" "jobboard-private-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-2 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.public[1]" "jobboard-public-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.private[0]" "jobboard-private-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-1 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
+          import_or_create_resource "route_table_association" "aws_route_table_association.private[1]" "jobboard-private-subnet-2" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-private-rt-2 --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
 
           # Import IAM role
-          import_resource "iam_role" "aws_iam_role.ec2_role" "jobboard-ec2-role"
+          import_or_create_resource "iam_role" "aws_iam_role.ec2_role" "jobboard-ec2-role"
 
       - name: Deploy infrastructure
         run: |

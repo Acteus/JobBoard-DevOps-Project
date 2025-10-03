@@ -141,9 +141,11 @@ jobs:
             echo "Consider requesting a limit increase or cleaning up unused EIPs"
           fi
 
-      - name: Validate DB Password
+      - name: Validate deployment requirements
         run: |
-          echo "Validating DB password format..."
+          echo "=== Validating Production Deployment Requirements ==="
+
+          # Check DB password
           if [ -z "${{ secrets.DB_PASSWORD }}" ]; then
             echo "❌ DB_PASSWORD secret is not set in GitHub repository"
             echo "Please add DB_PASSWORD to your repository secrets:"
@@ -152,12 +154,30 @@ jobs:
             echo "3. Add a new secret named 'DB_PASSWORD'"
             echo "4. Set a secure password (8-41 characters, letters, numbers, and @#\$%^&+=*! symbols only)"
             exit 1
-          elif [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
+          fi
+
+          # Validate DB password format
+          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
             echo "✅ DB password format is valid"
           else
             echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#\$%^&+=*! symbols"
             exit 1
           fi
+
+          # Check AWS credentials
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "❌ AWS credentials are not properly configured"
+            echo "Please add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to your repository secrets"
+            exit 1
+          fi
+
+          # Validate AWS region
+          if [ -z "${{ env.AWS_REGION }}" ]; then
+            echo "❌ AWS_REGION environment variable is not set"
+            exit 1
+          fi
+
+          echo "✅ All production deployment requirements validated"
 
 
       - name: Download build artifacts
@@ -174,134 +194,103 @@ jobs:
           path: backend/
         continue-on-error: true
 
+      - name: Create deployment variables file
+        run: |
+          cat > terraform/ci-deploy.tfvars << EOF
+          environment = "dev"
+          db_password = "${{ secrets.DB_PASSWORD }}"
+          aws_region = "${{ env.AWS_REGION }}"
+          project_name = "jobboard"
+          db_username = "jobboard_user"
+          instance_type = "t2.micro"
+          key_pair_name = "jobboard-key"
+          EOF
+
+      - name: Import existing resources
+        run: |
+          cd terraform
+
+          # Function to import resource if it exists
+          import_resource() {
+            local resource_type="$1"
+            local resource_name="$2"
+            local filter_value="$3"
+
+            echo "Checking for existing $resource_type: $resource_name..."
+            if [ "$resource_type" = "vpc" ]; then
+              RESOURCE_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values="$filter_value" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "subnet" ]; then
+              RESOURCE_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values="$filter_value" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "security_group" ]; then
+              RESOURCE_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values="$filter_value" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "iam_role" ]; then
+              RESOURCE_ID=$(aws iam get-role --role-name "$filter_value" --query 'Role.RoleName' --output text 2>/dev/null || echo "")
+            fi
+
+            if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ]; then
+              echo "Found existing $resource_type: $RESOURCE_ID"
+              terraform import "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
+            else
+              echo "No existing $resource_type found"
+            fi
+          }
+
+          # Import VPC
+          import_resource "vpc" "aws_vpc.main" "jobboard-vpc"
+
+          # Import subnets
+          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1"
+          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2"
+          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1"
+          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2"
+
+          # Import security groups
+          import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
+          import_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
+          import_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
+
+          # Import IAM role
+          import_resource "iam_role" "aws_iam_role.ec2_role" "jobboard-ec2-role"
+
       - name: Deploy infrastructure
         run: |
           cd terraform
-          terraform init
 
-          echo "Checking for existing resources..."
-          # Check if VPC exists and import if needed
-          VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
-            echo "Found existing VPC: $VPC_ID"
-            terraform import aws_vpc.main "$VPC_ID" 2>/dev/null || echo "VPC import failed or already imported"
-          fi
-
-          # Check if subnets exist and import if needed
-          for i in 0 1; do
-            SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
-            if [ ! -z "$SUBNET_ID" ] && [ "$SUBNET_ID" != "None" ]; then
-              echo "Found existing public subnet $((i+1)): $SUBNET_ID"
-              terraform import "aws_subnet.public[$i]" "$SUBNET_ID" 2>/dev/null || echo "Subnet import failed or already imported"
-            fi
-
-            PRIVATE_SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
-            if [ ! -z "$PRIVATE_SUBNET_ID" ] && [ "$PRIVATE_SUBNET_ID" != "None" ]; then
-              echo "Found existing private subnet $((i+1)): $PRIVATE_SUBNET_ID"
-              terraform import "aws_subnet.private[$i]" "$PRIVATE_SUBNET_ID" 2>/dev/null || echo "Private subnet import failed or already imported"
-            fi
-          done
-
-          # Check if security groups exist and import if needed
-          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
-            echo "Found existing web security group: $WEB_SG_ID"
-            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
-          fi
-
-          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
-            echo "Found existing app security group: $APP_SG_ID"
-            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
-          fi
-
-          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
-            echo "Found existing db security group: $DB_SG_ID"
-            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
-          fi
-
-          # Check if IAM role exists and import if needed
-          IAM_ROLE_NAME="jobboard-ec2-role"
-          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
-            echo "Found existing IAM role: $IAM_ROLE_NAME"
-            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
-          fi
-
-          # Check if security groups exist and import if needed
-          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
-            echo "Found existing web security group: $WEB_SG_ID"
-            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
-          fi
-
-          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
-            echo "Found existing app security group: $APP_SG_ID"
-            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
-          fi
-
-          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
-            echo "Found existing db security group: $DB_SG_ID"
-            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
-          fi
-
-          # Check if IAM role exists and import if needed
-          IAM_ROLE_NAME="jobboard-ec2-role"
-          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
-            echo "Found existing IAM role: $IAM_ROLE_NAME"
-            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
-          fi
-
-          # Check if security groups exist and import if needed
-          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
-            echo "Found existing web security group: $WEB_SG_ID"
-            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
-          fi
-
-          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
-            echo "Found existing app security group: $APP_SG_ID"
-            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
-          fi
-
-          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
-            echo "Found existing db security group: $DB_SG_ID"
-            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
-          fi
-
-          # Check if IAM role exists and import if needed
-          IAM_ROLE_NAME="jobboard-ec2-role"
-          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
-            echo "Found existing IAM role: $IAM_ROLE_NAME"
-            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
-          fi
+          echo "=== Terraform Deployment Started ==="
+          echo "Environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}"
+          echo "Timestamp: $(date)"
 
           echo "Checking AWS EIP limits..."
-          aws ec2 describe-addresses --query 'Addresses | length' || echo "EIP check completed"
+          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text 2>/dev/null) || {
+            echo "❌ Failed to check EIP limits"
+            exit 1
+          }
+          echo "Current EIP count: $EIP_COUNT"
+
+          if [ "$EIP_COUNT" -ge 4 ]; then
+            echo "⚠️ WARNING: High EIP usage ($EIP_COUNT/5)"
+            echo "Consider cleaning up unused EIPs or requesting a limit increase"
+          fi
 
           echo "Running terraform plan..."
-          terraform plan -input=false -no-color \
-            -var="environment=dev" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="aws_region=${{ env.AWS_REGION }}" \
-            -var="project_name=jobboard" \
-            -var="db_username=jobboard_user" \
-            -var="instance_type=t2.micro" \
-            -var="key_pair_name=jobboard-key"
+          if ! terraform plan -input=false -no-color -var-file=ci-deploy.tfvars -out=tfplan; then
+            echo "❌ Terraform plan failed"
+            exit 1
+          fi
 
           echo "Applying terraform configuration..."
-          terraform apply -input=false -no-color -auto-approve \
-            -var="environment=dev" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="aws_region=${{ env.AWS_REGION }}" \
-            -var="project_name=jobboard" \
-            -var="db_username=jobboard_user" \
-            -var="instance_type=t2.micro" \
-            -var="key_pair_name=jobboard-key"
+          if ! terraform apply -input=false -no-color -auto-approve tfplan; then
+            echo "❌ Terraform apply failed"
+            terraform show tfplan || echo "Could not show plan"
+            exit 1
+          fi
+
+          echo "✅ Terraform deployment completed successfully"
+          terraform output -json || echo "No outputs to display"
+
+      - name: Cleanup variables file
+        run: |
+          rm -f terraform/ci-deploy.tfvars
 
       - name: Build and push Docker images
         run: |
@@ -369,9 +358,11 @@ jobs:
             echo "Consider requesting a limit increase or cleaning up unused EIPs"
           fi
 
-      - name: Validate DB Password
+      - name: Validate deployment requirements
         run: |
-          echo "Validating DB password format..."
+          echo "=== Validating Deployment Requirements ==="
+
+          # Check DB password
           if [ -z "${{ secrets.DB_PASSWORD }}" ]; then
             echo "❌ DB_PASSWORD secret is not set in GitHub repository"
             echo "Please add DB_PASSWORD to your repository secrets:"
@@ -380,12 +371,30 @@ jobs:
             echo "3. Add a new secret named 'DB_PASSWORD'"
             echo "4. Set a secure password (8-41 characters, letters, numbers, and @#\$%^&+=*! symbols only)"
             exit 1
-          elif [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
+          fi
+
+          # Validate DB password format
+          if [[ "${{ secrets.DB_PASSWORD }}" =~ ^[A-Za-z0-9@#\$%\^\&\+\=\*\!]{8,41}$ ]]; then
             echo "✅ DB password format is valid"
           else
             echo "❌ DB password must be 8-41 characters and contain only letters, numbers, and @#\$%^&+=*! symbols"
             exit 1
           fi
+
+          # Check AWS credentials
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "❌ AWS credentials are not properly configured"
+            echo "Please add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to your repository secrets"
+            exit 1
+          fi
+
+          # Validate AWS region
+          if [ -z "${{ env.AWS_REGION }}" ]; then
+            echo "❌ AWS_REGION environment variable is not set"
+            exit 1
+          fi
+
+          echo "✅ All deployment requirements validated"
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -401,83 +410,105 @@ jobs:
           path: backend/
         continue-on-error: true
 
+      - name: Create deployment variables file
+        run: |
+          cat > terraform/ci-deploy.tfvars << EOF
+          environment = "prod"
+          db_password = "${{ secrets.DB_PASSWORD }}"
+          aws_region = "${{ env.AWS_REGION }}"
+          project_name = "jobboard"
+          db_username = "jobboard_user"
+          instance_type = "t2.micro"
+          key_pair_name = "jobboard-key"
+          deletion_protection = true
+          multi_az = true
+          EOF
+
+      - name: Import existing resources
+        run: |
+          cd terraform
+
+          # Function to import resource if it exists
+          import_resource() {
+            local resource_type="$1"
+            local resource_name="$2"
+            local filter_value="$3"
+
+            echo "Checking for existing $resource_type: $resource_name..."
+            if [ "$resource_type" = "vpc" ]; then
+              RESOURCE_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values="$filter_value" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "subnet" ]; then
+              RESOURCE_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values="$filter_value" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "security_group" ]; then
+              RESOURCE_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values="$filter_value" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+            elif [ "$resource_type" = "iam_role" ]; then
+              RESOURCE_ID=$(aws iam get-role --role-name "$filter_value" --query 'Role.RoleName' --output text 2>/dev/null || echo "")
+            fi
+
+            if [ ! -z "$RESOURCE_ID" ] && [ "$RESOURCE_ID" != "None" ]; then
+              echo "Found existing $resource_type: $RESOURCE_ID"
+              terraform import "$resource_name" "$RESOURCE_ID" || echo "Import failed or already imported"
+            else
+              echo "No existing $resource_type found"
+            fi
+          }
+
+          # Import VPC
+          import_resource "vpc" "aws_vpc.main" "jobboard-vpc"
+
+          # Import subnets
+          import_resource "subnet" "aws_subnet.public[0]" "jobboard-public-subnet-1"
+          import_resource "subnet" "aws_subnet.public[1]" "jobboard-public-subnet-2"
+          import_resource "subnet" "aws_subnet.private[0]" "jobboard-private-subnet-1"
+          import_resource "subnet" "aws_subnet.private[1]" "jobboard-private-subnet-2"
+
+          # Import security groups
+          import_resource "security_group" "aws_security_group.web" "jobboard-web-sg"
+          import_resource "security_group" "aws_security_group.app" "jobboard-app-sg"
+          import_resource "security_group" "aws_security_group.db" "jobboard-db-sg"
+
+          # Import IAM role
+          import_resource "iam_role" "aws_iam_role.ec2_role" "jobboard-ec2-role"
+
       - name: Deploy infrastructure
         run: |
           cd terraform
-          terraform init
 
-          echo "Checking for existing resources..."
-          # Check if VPC exists and import if needed
-          VPC_ID=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=jobboard-vpc --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
-            echo "Found existing VPC: $VPC_ID"
-            terraform import aws_vpc.main "$VPC_ID" 2>/dev/null || echo "VPC import failed or already imported"
-          fi
+          echo "=== Production Terraform Deployment Started ==="
+          echo "Environment: production"
+          echo "Timestamp: $(date)"
 
-          # Check if subnets exist and import if needed
-          for i in 0 1; do
-            SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
-            if [ ! -z "$SUBNET_ID" ] && [ "$SUBNET_ID" != "None" ]; then
-              echo "Found existing public subnet $((i+1)): $SUBNET_ID"
-              terraform import "aws_subnet.public[$i]" "$SUBNET_ID" 2>/dev/null || echo "Subnet import failed or already imported"
-            fi
+          echo "Checking AWS EIP limits for production..."
+          EIP_COUNT=$(aws ec2 describe-addresses --query 'Addresses | length' --output text 2>/dev/null) || {
+            echo "❌ Failed to check EIP limits"
+            exit 1
+          }
+          echo "Current EIP count: $EIP_COUNT"
 
-            PRIVATE_SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-private-subnet-$((i+1)) --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
-            if [ ! -z "$PRIVATE_SUBNET_ID" ] && [ "$PRIVATE_SUBNET_ID" != "None" ]; then
-              echo "Found existing private subnet $((i+1)): $PRIVATE_SUBNET_ID"
-              terraform import "aws_subnet.private[$i]" "$PRIVATE_SUBNET_ID" 2>/dev/null || echo "Private subnet import failed or already imported"
-            fi
-          done
-
-          # Check if security groups exist and import if needed
-          WEB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-web-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$WEB_SG_ID" ] && [ "$WEB_SG_ID" != "None" ]; then
-            echo "Found existing web security group: $WEB_SG_ID"
-            terraform import aws_security_group.web "$WEB_SG_ID" 2>/dev/null || echo "Web SG import failed or already imported"
-          fi
-
-          APP_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-app-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$APP_SG_ID" ] && [ "$APP_SG_ID" != "None" ]; then
-            echo "Found existing app security group: $APP_SG_ID"
-            terraform import aws_security_group.app "$APP_SG_ID" 2>/dev/null || echo "App SG import failed or already imported"
-          fi
-
-          DB_SG_ID=$(aws ec2 describe-security-groups --filters Name=tag:Name,Values=jobboard-db-sg --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
-          if [ ! -z "$DB_SG_ID" ] && [ "$DB_SG_ID" != "None" ]; then
-            echo "Found existing db security group: $DB_SG_ID"
-            terraform import aws_security_group.db "$DB_SG_ID" 2>/dev/null || echo "DB SG import failed or already imported"
-          fi
-
-          # Check if IAM role exists and import if needed
-          IAM_ROLE_NAME="jobboard-ec2-role"
-          if aws iam get-role --role-name "$IAM_ROLE_NAME" --query 'Role.RoleName' --output text 2>/dev/null | grep -q "$IAM_ROLE_NAME"; then
-            echo "Found existing IAM role: $IAM_ROLE_NAME"
-            terraform import aws_iam_role.ec2_role "$IAM_ROLE_NAME" 2>/dev/null || echo "IAM role import failed or already imported"
+          if [ "$EIP_COUNT" -ge 4 ]; then
+            echo "⚠️ WARNING: High EIP usage ($EIP_COUNT/5)"
+            echo "Consider cleaning up unused EIPs or requesting a limit increase"
           fi
 
           echo "Running terraform plan..."
-          terraform plan -input=false -no-color \
-            -var="environment=prod" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="aws_region=${{ env.AWS_REGION }}" \
-            -var="project_name=jobboard" \
-            -var="db_username=jobboard_user" \
-            -var="instance_type=t2.micro" \
-            -var="key_pair_name=jobboard-key" \
-            -var="deletion_protection=true" \
-            -var="multi_az=true"
+          if ! terraform plan -input=false -no-color -var-file=ci-deploy.tfvars -out=tfplan; then
+            echo "❌ Terraform plan failed"
+            exit 1
+          fi
 
           echo "Applying terraform configuration..."
-          terraform apply -input=false -no-color -auto-approve \
-            -var="environment=prod" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="aws_region=${{ env.AWS_REGION }}" \
-            -var="project_name=jobboard" \
-            -var="db_username=jobboard_user" \
-            -var="instance_type=t2.micro" \
-            -var="key_pair_name=jobboard-key" \
-            -var="deletion_protection=true" \
-            -var="multi_az=true"
+          if ! terraform apply -input=false -no-color -auto-approve tfplan; then
+            echo "❌ Terraform apply failed"
+            terraform show tfplan || echo "Could not show plan"
+            exit 1
+          fi
+
+          echo "✅ Production terraform deployment completed successfully"
+          terraform output -json || echo "No outputs to display"
+
+      - name: Cleanup variables file
+        run: |
+          rm -f terraform/ci-deploy.tfvars
 
       - name: Build and push Docker images
         run: |

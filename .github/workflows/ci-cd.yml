@@ -284,31 +284,17 @@ jobs:
               RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_NAME" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
             elif [ "$resource_type" = "route_table_association" ]; then
               # Special handling for route table associations - get proper subnet and route table IDs
-              SUBNET_ID="$4"
-              ROUTE_TABLE_ID="$5"
-              if [ ! -z "$SUBNET_ID" ] && [ ! -z "$ROUTE_TABLE_ID" ] && [ "$SUBNET_ID" != "None" ] && [ "$ROUTE_TABLE_ID" != "None" ]; then
-                # Verify these are actually subnet and route table IDs, not security group IDs
-                SUBNET_CHECK=$(aws ec2 describe-subnets --subnet-ids "$SUBNET_ID" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
-                RT_CHECK=$(aws ec2 describe-route-tables --route-table-ids "$ROUTE_TABLE_ID" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")
+              SUBNET_NAME="$4"
+              ROUTE_TABLE_NAME="$5"
 
-                if [ ! -z "$SUBNET_CHECK" ] && [ ! -z "$RT_CHECK" ] && [ "$SUBNET_CHECK" != "None" ] && [ "$RT_CHECK" != "None" ]; then
-                  RESOURCE_ID="$SUBNET_ID/$ROUTE_TABLE_ID"
-                  echo "Found valid subnet $SUBNET_ID and route table $ROUTE_TABLE_ID"
-                fi
-              fi
-            elif [ "$resource_type" = "db_subnet_group" ]; then
-              # Check for existing DB subnet group
-              RESOURCE_ID=$(aws rds describe-db-subnet-groups --subnet-group-name "$filter_value" --query 'DBSubnetGroups[0].DBSubnetGroupName' --output text 2>/dev/null || echo "")
-            elif [ "$resource_type" = "log_group" ]; then
-              # Check for existing CloudWatch log group - use exact name match
-              LOG_GROUP_NAME="/aws/ec2/jobboard-app"
-              RESOURCE_ID=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP_NAME" --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "")
-            elif [ "$resource_type" = "route_table_association" ]; then
-              # Special handling for route table associations - get proper subnet and route table IDs
-              SUBNET_ID="$4"
-              ROUTE_TABLE_ID="$5"
+              # Get subnet ID by name tag
+              SUBNET_ID=$(aws ec2 describe-subnets --filters Name=tag:Name,Values="$SUBNET_NAME" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+
+              # Get route table ID by name tag
+              ROUTE_TABLE_ID=$(aws ec2 describe-route-tables --filters Name=tag:Name,Values="$ROUTE_TABLE_NAME" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")
+
               if [ ! -z "$SUBNET_ID" ] && [ ! -z "$ROUTE_TABLE_ID" ] && [ "$SUBNET_ID" != "None" ] && [ "$ROUTE_TABLE_ID" != "None" ]; then
-                # Verify these are actually subnet and route table IDs, not security group IDs
+                # Verify these are actually valid subnet and route table IDs
                 SUBNET_CHECK=$(aws ec2 describe-subnets --subnet-ids "$SUBNET_ID" --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
                 RT_CHECK=$(aws ec2 describe-route-tables --route-table-ids "$ROUTE_TABLE_ID" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")
 
@@ -362,7 +348,7 @@ jobs:
           import_or_create_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
 
           # Import CloudWatch log group
-          import_or_create_resource "log_group" "aws_cloudwatch_log_group.app" "/aws/ec2/jobboard-app"
+          import_or_create_resource "log_group" "aws_cloudwatch_log_group.app" "/aws/ec2/${PROJECT_NAME:-jobboard}-app"
 
           # Import route table associations
           import_or_create_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"
@@ -634,7 +620,7 @@ jobs:
           import_or_create_resource "db_subnet_group" "aws_db_subnet_group.main" "jobboard-db-subnet-group"
 
           # Import CloudWatch log group
-          import_or_create_resource "log_group" "aws_cloudwatch_log_group.app" "/aws/ec2/jobboard-app"
+          import_or_create_resource "log_group" "aws_cloudwatch_log_group.app" "/aws/ec2/${PROJECT_NAME:-jobboard}-app"
 
           # Import route table associations
           import_or_create_resource "route_table_association" "aws_route_table_association.public[0]" "jobboard-public-subnet-1" "$(aws ec2 describe-subnets --filters Name=tag:Name,Values=jobboard-public-subnet-1 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")" "$(aws ec2 describe-route-tables --filters Name=tag:Name,Values=jobboard-public-rt --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null || echo "")"

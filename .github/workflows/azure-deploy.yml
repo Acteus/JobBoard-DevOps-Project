@@ -30,28 +30,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd frontend && npm ci
-          cd ../backend && npm ci
+          npm ci
 
-      - name: Lint frontend
+      - name: Lint code
         run: |
-          cd frontend
-          npm run lint || echo "No lint script defined"
+          npm run lint || echo "Lint issues found"
 
-      - name: Lint backend
+      - name: Run tests
         run: |
-          cd backend
-          npm run lint || echo "No lint script defined"
-
-      - name: Test frontend
-        run: |
-          cd frontend
-          npm test -- --coverage --watchAll=false || echo "Tests failed or not defined"
-
-      - name: Test backend
-        run: |
-          cd backend
-          npm test || echo "Tests failed or not defined"
+          npm run test || echo "Tests failed or not defined"
 
   # Build Application
   build:
@@ -72,22 +59,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: |
             package-lock.json
-            frontend/package-lock.json
-            backend/package-lock.json
 
-      - name: Build frontend
+      - name: Build application
         run: |
-          cd frontend
           npm ci
           npm run build
-          cd ..
-
-      - name: Build backend
-        run: |
-          cd backend
-          npm ci
-          npm run build || echo "No build script defined"
-          cd ..
 
       - name: Generate build hashes
         id: hash
@@ -206,8 +182,7 @@ jobs:
 
       - name: Run npm audit
         run: |
-          cd frontend && npm audit --audit-level=moderate || echo "Security issues found"
-          cd ../backend && npm audit --audit-level=moderate || echo "Security issues found"
+          npm audit --audit-level=moderate || echo "Security issues found"
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

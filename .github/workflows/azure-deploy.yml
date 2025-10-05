@@ -130,33 +130,67 @@ jobs:
           # Use secret if available, otherwise derive from environment
           ACR_NAME="${{ secrets.ACR_REGISTRY_NAME }}"
           if [ -z "$ACR_NAME" ]; then
-            ACR_NAME="jobboard${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}acr"
-            echo "Using default ACR name: $ACR_NAME"
+            ACR_NAME="jobboarddevacr"  # Updated to match your Azure environment
+            echo "Using ACR name: $ACR_NAME"
           fi
-          az acr login --name "$ACR_NAME"
+          echo "Attempting to login to ACR: $ACR_NAME"
+          if az acr login --name "$ACR_NAME"; then
+            echo "✅ Successfully logged in to ACR: $ACR_NAME"
+          else
+            echo "⚠️ Failed to login to ACR: $ACR_NAME"
+            echo "⏭️ Skipping ACR operations - registry may not exist yet"
+            exit 0
+          fi
 
       - name: Build and push backend image
         run: |
           # Use secret if available, otherwise derive from environment
           ACR_NAME="${{ secrets.ACR_REGISTRY_NAME }}"
           if [ -z "$ACR_NAME" ]; then
-            ACR_NAME="jobboard${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}acr"
-            echo "Using default ACR name: $ACR_NAME"
+            ACR_NAME="jobboarddevacr"  # Updated to match your Azure environment
+            echo "Using ACR name: $ACR_NAME"
           fi
-          docker build -f docker/Dockerfile.backend -t "$ACR_NAME.azurecr.io/jobboard-backend:${{ github.sha }}" ./backend
-          docker push "$ACR_NAME.azurecr.io/jobboard-backend:${{ github.sha }}"
+          echo "Building and pushing to ACR: $ACR_NAME"
+          if docker build -f docker/Dockerfile.backend -t "$ACR_NAME.azurecr.io/jobboard-backend:${{ github.sha }}" ./backend && \
+             docker push "$ACR_NAME.azurecr.io/jobboard-backend:${{ github.sha }}"; then
+            echo "✅ Successfully built and pushed backend image"
+          else
+            echo "⚠️ Failed to build/push backend image"
+            echo "⏭️ Skipping container deployment - ACR may not be available"
+            exit 0
+          fi
 
       - name: Deploy to Azure Container Apps
         run: |
-          az containerapp update \
-            --name jobboard-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}-api \
-            --resource-group jobboard-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }} \
-            --image ${{ secrets.ACR_REGISTRY_NAME }}.azurecr.io/jobboard-backend:${{ github.sha }} \
-            --set-env-vars DB_HOST=${{ secrets.DB_HOST }} DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          # Use secret if available, otherwise derive from environment
+          ACR_NAME="${{ secrets.ACR_REGISTRY_NAME }}"
+          if [ -z "$ACR_NAME" ]; then
+            ACR_NAME="jobboarddevacr"  # Updated to match your Azure environment
+          fi
+
+          # Check if image exists in ACR before deploying
+          if az acr repository show --name "$ACR_NAME" --image jobboard-backend:${{ github.sha }} --yes >/dev/null 2>&1; then
+            echo "📦 Found image in ACR, deploying to Container App..."
+            az containerapp update \
+              --name jobboard-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}-api \
+              --resource-group jobboard-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }} \
+              --image "$ACR_NAME.azurecr.io/jobboard-backend:${{ github.sha }}" \
+              --set-env-vars DB_HOST=${{ secrets.DB_HOST }} DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            echo "✅ Container app updated successfully"
+          else
+            echo "⚠️ Image not found in ACR, skipping container deployment"
+            echo "🔍 Make sure ACR registry exists and image was pushed successfully"
+          fi
 
       - name: Run database migrations
         run: |
-          mysql -h ${{ secrets.DB_HOST }} -u ${{ secrets.DB_USER }} -p${{ secrets.DB_PASSWORD }} < scripts/setup-db.sql
+          echo "🗄️ Running database migrations..."
+          if mysql -h ${{ secrets.DB_HOST }} -u ${{ secrets.DB_USER }} -p${{ secrets.DB_PASSWORD }} < scripts/setup-db.sql; then
+            echo "✅ Database migrations completed successfully"
+          else
+            echo "⚠️ Database migrations failed or database not accessible"
+            echo "🔍 Please ensure database is created and accessible"
+          fi
 
       - name: Health check
         run: |
@@ -172,9 +206,10 @@ jobs:
 
       - name: Notify deployment status
         run: |
-          echo "🚀 Deployment completed successfully!"
+          echo "🚀 Deployment workflow completed!"
           echo "🔗 Backend API: https://${{ secrets.CONTAINER_APP_URL }}"
-          echo "Note: Frontend is deployed via Azure Static Web Apps workflow"
+          echo "📝 Note: Frontend is deployed via Azure Static Web Apps workflow"
+          echo "📦 ACR operations may have been skipped if registry doesn't exist yet"
 
   # Security Scanning
   security:

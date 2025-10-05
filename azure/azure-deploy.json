@@ -32,6 +32,12 @@
       "metadata": {
         "description": "Project name prefix for resources"
       }
+    },
+    "githubToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "GitHub token for repository access"
+      }
     }
   },
   "variables": {
@@ -204,9 +210,9 @@
         "branch": "[if(equals(parameters('environment'), 'prod'), 'main', 'develop')]",
         "repositoryToken": "[parameters('githubToken')]",
         "buildProperties": {
-          "appLocation": "frontend",
+          "appLocation": "/",
           "apiLocation": "backend",
-          "appBuildCommand": "npm run build",
+          "appBuildCommand": "cd frontend && npm run build",
           "apiBuildCommand": "npm run build",
           "outputLocation": "build"
         }

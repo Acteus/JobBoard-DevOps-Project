@@ -185,11 +185,18 @@ jobs:
       - name: Run database migrations
         run: |
           echo "🗄️ Running database migrations..."
-          if mysql -h ${{ secrets.DB_HOST }} -u ${{ secrets.DB_USER }} -p${{ secrets.DB_PASSWORD }} < scripts/setup-db.sql; then
-            echo "✅ Database migrations completed successfully"
+          # Check if required secrets are available
+          if [ -z "${{ secrets.DB_HOST }}" ] || [ -z "${{ secrets.DB_USER }}" ] || [ -z "${{ secrets.DB_PASSWORD }}" ]; then
+            echo "⚠️ Database secrets not configured"
+            echo "🔍 Please set DB_HOST, DB_USER, and DB_PASSWORD secrets"
+            echo "💡 Run the ARM template deployment first to get these values"
           else
-            echo "⚠️ Database migrations failed or database not accessible"
-            echo "🔍 Please ensure database is created and accessible"
+            if mysql -h "${{ secrets.DB_HOST }}" -u "${{ secrets.DB_USER }}" -p"${{ secrets.DB_PASSWORD }}" < scripts/setup-db.sql; then
+              echo "✅ Database migrations completed successfully"
+            else
+              echo "⚠️ Database migrations failed or database not accessible"
+              echo "🔍 Please ensure database is created and accessible"
+            fi
           fi
 
       - name: Health check
@@ -197,17 +204,29 @@ jobs:
           echo "Waiting for deployment to complete..."
           sleep 60
 
-          # Check if the backend API is responding
-          if curl -f "https://${{ secrets.CONTAINER_APP_URL }}/health" > /dev/null 2>&1; then
-            echo "✅ Backend health check passed"
+          # Check if CONTAINER_APP_URL is available
+          if [ -n "${{ secrets.CONTAINER_APP_URL }}" ] && [ "${{ secrets.CONTAINER_APP_URL }}" != "https://" ]; then
+            # Check if the backend API is responding
+            if curl -f "https://${{ secrets.CONTAINER_APP_URL }}/health" > /dev/null 2>&1; then
+              echo "✅ Backend health check passed"
+            else
+              echo "⚠️ Backend health check failed - application may still be starting"
+            fi
           else
-            echo "⚠️ Backend health check failed - application may still be starting"
+            echo "⚠️ CONTAINER_APP_URL not configured, skipping health check"
           fi
 
       - name: Notify deployment status
         run: |
           echo "🚀 Deployment workflow completed!"
-          echo "🔗 Backend API: https://${{ secrets.CONTAINER_APP_URL }}"
+
+          # Show URLs if available
+          if [ -n "${{ secrets.CONTAINER_APP_URL }}" ] && [ "${{ secrets.CONTAINER_APP_URL }}" != "https://" ]; then
+            echo "🔗 Backend API: https://${{ secrets.CONTAINER_APP_URL }}"
+          else
+            echo "🔗 Backend API: Not available (configure CONTAINER_APP_URL secret)"
+          fi
+
           echo "📝 Note: Frontend is deployed via Azure Static Web Apps workflow"
           echo "📦 ACR operations may have been skipped if registry doesn't exist yet"
 

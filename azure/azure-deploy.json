@@ -38,6 +38,13 @@
       "metadata": {
         "description": "GitHub token for repository access"
       }
+    },
+    "skipStaticWebApp": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Skip Static Web Apps deployment if already configured with GitHub"
+      }
     }
   },
   "variables": {
@@ -197,6 +204,7 @@
       }
     },
     {
+      "condition": "[not(parameters('skipStaticWebApp'))]",
       "type": "Microsoft.Web/staticSites",
       "apiVersion": "2022-09-01",
       "name": "[variables('staticWebAppName')]",
@@ -311,6 +319,7 @@
   ],
   "outputs": {
     "staticWebAppUrl": {
+      "condition": "[not(parameters('skipStaticWebApp'))]",
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Web/staticSites', variables('staticWebAppName'))).defaultHostname]"
     },

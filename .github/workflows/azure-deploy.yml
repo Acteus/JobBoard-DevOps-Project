@@ -127,12 +127,24 @@ jobs:
 
       - name: Login to Azure Container Registry
         run: |
-          az acr login --name ${{ secrets.ACR_REGISTRY_NAME }}
+          # Use secret if available, otherwise derive from environment
+          ACR_NAME="${{ secrets.ACR_REGISTRY_NAME }}"
+          if [ -z "$ACR_NAME" ]; then
+            ACR_NAME="jobboard${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}acr"
+            echo "Using default ACR name: $ACR_NAME"
+          fi
+          az acr login --name "$ACR_NAME"
 
       - name: Build and push backend image
         run: |
-          docker build -f docker/Dockerfile.backend -t ${{ secrets.ACR_REGISTRY_NAME }}.azurecr.io/jobboard-backend:${{ github.sha }} ./backend
-          docker push ${{ secrets.ACR_REGISTRY_NAME }}.azurecr.io/jobboard-backend:${{ github.sha }}
+          # Use secret if available, otherwise derive from environment
+          ACR_NAME="${{ secrets.ACR_REGISTRY_NAME }}"
+          if [ -z "$ACR_NAME" ]; then
+            ACR_NAME="jobboard${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}acr"
+            echo "Using default ACR name: $ACR_NAME"
+          fi
+          docker build -f docker/Dockerfile.backend -t "$ACR_NAME.azurecr.io/jobboard-backend:${{ github.sha }}" ./backend
+          docker push "$ACR_NAME.azurecr.io/jobboard-backend:${{ github.sha }}"
 
       - name: Deploy to Azure Container Apps
         run: |

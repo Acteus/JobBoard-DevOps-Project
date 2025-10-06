@@ -1,3 +1,5 @@
+[![Azure Deployment](https://github.com/Acteus/JobBoard-DevOps-Project/actions/workflows/azure-deploy.yml/badge.svg?branch=development)](https://github.com/Acteus/JobBoard-DevOps-Project/actions/workflows/azure-deploy.yml)
+
 # JobBoard-DevOps-Project
 A scalable job board web application for minimum-wage earners, demonstrating Cloud and DevOps practices with **Azure Serverless Architecture** (migrating from AWS).
 
